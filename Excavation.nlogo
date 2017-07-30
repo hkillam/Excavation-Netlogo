@@ -1,10 +1,30 @@
 extensions[ bitmap ]
 breed [flagmen flagman]
 breed [trucks truck]
+breed [loaders loader]
 breed [material dirt]
+
+globals [
+  ramp-up?
+  ramp-down?
+
+  road-to-entrance
+  road-to-top-ramp
+  road-down-ramp
+  road-to-loader
+  road-to-bottom-ramp
+  road-up-ramp
+  road-to-exit
+  road-to-dump
+
+  ;; mark some specific locations in our site
+  dest-entrance
+]
+
 
 patches-own [
   is-ramp?          ;; part of the ramp
+  is-excavated?     ;; in the area to be excavated
 ]
 
 trucks-own [
@@ -12,68 +32,163 @@ trucks-own [
   target            ;;
   using-ramp?       ;; is this truck on the ramp?
   radius            ;; for moving around the badlands
+  loaderid          ;; which loader is this truck going to?
+  loading?
+  loaded            ;; quantity loaded (scoops * scoop-size)
+]
+
+loaders-own [
+  id
+  material-initial       ;; initial quantity of material this loader needs to move
+  remaining-material     ;;
+  loading?               ;; is it currently loading a truck?
+  scoops                 ;; number of scoops loaded into the current truck
+  trucks-in-queue        ;; number of trucks waiting to be loaded by this loader
+  current-truck          ;; which truck is it loading
+  working                ;; ticks that the scoop needs to do the job.
+]
+
+flagmen-own [
+  is-out?                ;; true/false - guy on the way out of the site
 ]
 
 to setup
+  set-constants
   clear-turtles
-  import-drawing "20161108-MMLLC-PRO-LOG-PRO-LOG-01C.jpg"
+  ifelse use_ramp? [
+    import-drawing "site_withramp.png"]
+  [ import-drawing "site_noramp.png"]
+
+  set ramp-up? false
+  set ramp-down? true
 
   ask patches [
     set is-ramp? false
+    set is-excavated? false
   ]
 
   ask patches with [pxcor >= -1 and pxcor <= 1 and pycor >= -4 and pycor <= 6] [
     set is-ramp? true
   ]
 
-  create-trucks 5 [
+  create-trucks number-trucks [
     set color yellow
     set size 2
     set shape "truck"
     setxy -11 -15
     set using-ramp? false
-    set road 1
-    set target patch  -11 5
+    set loading? false
+    set road road-to-entrance
+    set target dest-entrance
     face-nowrap target
   ]
 
   ask patches with [pxcor >= -8 and pxcor <= -2 and pycor >= -12 and pycor <= 3] [
-    sprout 1 [
-      set breed material
-      set color magenta
-      set shape "box"
-    ]
+    set is-excavated? true
+  ;;  sprout 1 [
+  ;;    set breed material
+  ;;    set color magenta
+  ;;    set shape "box"
+  ;;  ]
   ]
 
+  create-loaders number-loaders [
+    set color magenta
+    set shape "bulldozer top"
+    set size 2
+    set material-initial total-volume-excavation / number-loaders
+    set remaining-material material-initial
+    set current-truck -1
+    set working time-scoop
+    move-to one-of patches with [is-excavated? = true]
+  ]
 
 
 
 
 create-flagmen 1 [
   setxy -10 5
-      set shape "person"
+      set shape "person construction"
       set color 65
       set size 2
 ]
 create-flagmen 1 [
   setxy 12 7
-      set shape "person"
+      set shape "person construction"
       set color red
       set size 2
 ]
 reset-ticks
 end
 
+to set-constants
+  set road-to-entrance   1
+  set road-to-top-ramp   2   ;; from entrance flagman to top of ramp
+  set road-down-ramp     3   ;; from top of ramp to bottom
+  set road-to-loader     4   ;;  to a piece of material
+  set road-to-bottom-ramp 5  ;;  grab material and go to to bottom of ramp
+  set road-up-ramp       6   ;;  up the ramp
+  set road-to-exit      12   ;;  from ramp to exit flagman
+  set road-to-dump      13   ;;  drive away
+
+  set dest-entrance patch  -11 5       ;; flagman at the entrance to the site
+end
 
 to go
-  if count material = 0 [stop]
-  move-trucks
+  if  material-remaining <= 0 [stop]
+
+  ask trucks with [loading? = true] [
+    get-loader
+  ]
+  ask trucks with [loading? = false] [
+     move-truck
+  ]
+  ask loaders [
+    scoop
+  ]
   tick
 end
 
 
-to move-trucks
-  ask trucks with [road != 4 and road != 5] [
+to get-loader
+  let myloader  one-of loaders in-radius 1
+  let myid [who] of self
+
+  ;; if i am being loaded
+  ifelse  [current-truck] of myloader = myid [
+
+    ;; if I am full, release the loader
+    if loaded >= volume-truck [
+      ask myloader [set current-truck -1]
+      set loading? false
+    ]
+  ][
+
+    ;; grab the loader if it is free
+    if  [current-truck] of myloader = -1 [
+      ask myloader [set current-truck myid]
+      set loading? true
+    ]
+  ]
+end
+
+to scoop
+  ifelse  working <= 0 [
+    if current-truck != -1 [
+       ask truck current-truck [
+         set loaded  loaded + volume-scoop
+       ]
+       set remaining-material remaining-material - volume-scoop
+       set working time-scoop
+    ]
+  ][
+    set working  working - 1
+  ]
+end
+
+to move-truck
+
+  if  road != road-to-loader and road != road-to-bottom-ramp [
     ifelse count trucks-on patch-ahead 1 = 0 [
       if ramp-ready? = true [
         forward 1
@@ -82,48 +197,58 @@ to move-trucks
         ]
       ]
     ][
-      ;; trucks in the pit need to dance
-      if road = 4 or road = 5 [
+      ;; trucks just stepped into the pit need to step out of the way
+      if road = road-to-loader or road = road-to-bottom-ramp [
         right 90
         if count trucks-on patch-ahead 1 = 0 [
           forward 1
         ]
       ]
-      if road = 4 [
-        let target-material min-one-of (material in-radius 25 ) [distance myself]
-        ask target-material [ set color pink]
-        set target [ patch-here ] OF target-material
+      if road = road-to-loader [
+        ;;let target-material min-one-of (loader in-radius 25 ) [distance myself]
+        ;;ask target-material [ set color pink]
+        set target [ patch-here ] OF one-of loaders
+        ;;set target [ patch-here ] OF target-material
       ]
       face-nowrap target
     ]
   ]
-  ask trucks with [road = 4 or road = 5] [
+  if road = road-to-loader or road = road-to-bottom-ramp [
     arc-forward
     if patch-here = target [
            set-next-section
     ]
   ]
+
+end
+
+;; get the total remaining material at each loader
+to-report material-remaining
+  let remaining  0
+  ask loaders [
+    set remaining remaining + remaining-material
+  ]
+  report remaining
 end
 
 to set-next-section
-
-    ifelse road = 1 [
-      set road 2   ;; from entrance flagman to top of ramp
+    ifelse road = road-to-entrance [
+      set road road-to-top-ramp   ;; from entrance flagman to top of ramp
       set target patch 0 5
+
     ][
-    ifelse road = 2 [
-      set road 3   ;; from top of ramp to bottom
+    ifelse road = road-to-top-ramp [
+      set road road-down-ramp   ;; from top of ramp to bottom
       set target patch 0 -4
 
     ][
-    ifelse road = 3 [
-      set road 4  ;;  to a piece of material
+    ifelse road = road-down-ramp [
+      set road road-to-loader  ;;  to a piece of material
       set using-ramp? false
         rt 90
         fd 1
-      let target-material min-one-of (material in-radius 25 ) [distance myself]
-      ask target-material [ set color pink]
-      set target [ patch-here ] OF target-material
+        let target-loader one-of loaders
+        set target [ patch-here ] OF target-loader
 
       set radius distance target / 2
         if radius > 2 [
@@ -134,45 +259,42 @@ to set-next-section
           ]
         ]
     ][
-    ifelse road = 4 [
-      if who = 0 [
-        show "pick up and go to ramp"
-      ]
-      ask material-on target [die]
-      set road 5  ;;  grab material and go to to bottom of ramp
+    ifelse road = road-to-loader [
+        set loading? true
+      ;;ask material-on target [die]
+      set road road-to-bottom-ramp  ;;  grab material and go to to bottom of ramp
       set target patch 0 -5
       set radius distance target / 2
                   if radius > 2 [
           rt 90
         ]
     ][
-    ifelse road = 5 [
+    ifelse road = road-to-bottom-ramp [
 
-      set road 6  ;;  up the ramp
+      set road road-up-ramp  ;;  up the ramp
       set target patch 0 5
     ][
-    ifelse road = 6 [
-      set road 12  ;;  from ramp to exit flagman
+    ifelse road = road-up-ramp [
+      set road road-to-exit  ;;  from ramp to exit flagman
       set target patch 12 5
 
     ][
-    ifelse road = 12 [
-      set road 13  ;;  drive away
+    ifelse road = road-to-exit [
+      set road road-to-dump  ;;  drive away
       set target patch 12 -13
 
     ][
-    if road = 13 [
-      set road 1  ;;  teleport back to beginning
+    if road = road-to-dump [
+      set road road-to-entrance  ;;  teleport back to beginning
       setxy -11 -15
-      set target patch  -11 5
+      set target dest-entrance
 
-    ]
-    ]]]]]]]
+    ]]]]]]]]
+
     face-nowrap target
-
-                    if (road = 4 or road = 5) and radius > 2 [
+    if (road = 4 or road = 5) and radius > 2 [
           rt 90
-        ]
+    ]
 end
 
 to arc-forward  ;; turtle procedure
@@ -282,10 +404,10 @@ NIL
 INPUTBOX
 16
 87
-171
+207
 147
-number_trucks
-0.0
+number-trucks
+7.0
 1
 0
 Number
@@ -295,8 +417,8 @@ INPUTBOX
 239
 203
 299
-number_loaders
-0.0
+number-loaders
+3.0
 1
 0
 Number
@@ -306,8 +428,8 @@ INPUTBOX
 22
 829
 82
-time_wait_exit_mean
-0.0
+time_wait_exit
+3.0
 1
 0
 Number
@@ -318,7 +440,7 @@ INPUTBOX
 829
 146
 time_unload
-0.0
+5.0
 1
 0
 Number
@@ -328,8 +450,8 @@ INPUTBOX
 151
 109
 211
-volume_truck
-0.0
+volume-truck
+10.0
 1
 0
 Number
@@ -340,7 +462,7 @@ INPUTBOX
 206
 211
 volume_truck_deviation
-0.0
+1.0
 1
 0
 Number
@@ -350,8 +472,8 @@ INPUTBOX
 299
 98
 359
-volume_scoop
-0.0
+volume-scoop
+1.0
 1
 0
 Number
@@ -362,7 +484,7 @@ INPUTBOX
 204
 359
 volume_scoop_deviation
-0.0
+0.2
 1
 0
 Number
@@ -372,8 +494,8 @@ INPUTBOX
 201
 834
 261
-total_volume_excavation
-0.0
+total-volume-excavation
+1000.0
 1
 0
 Number
@@ -381,13 +503,13 @@ Number
 INPUTBOX
 6
 360
-95
+161
 420
-time_scoop
-NIL
+time-scoop
+3.0
 1
 0
-String
+Number
 
 INPUTBOX
 96
@@ -395,7 +517,7 @@ INPUTBOX
 206
 420
 time_scoop_deviation
-NIL
+.2
 1
 0
 String
@@ -410,6 +532,17 @@ use_ramp?
 0
 1
 -1000
+
+MONITOR
+681
+294
+795
+339
+material-remaining
+material-remaining
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -481,6 +614,38 @@ Circle -7500403 true true 110 127 80
 Circle -7500403 true true 110 75 80
 Line -7500403 true 150 100 80 30
 Line -7500403 true 150 100 220 30
+
+bulldozer top
+true
+0
+Rectangle -7500403 true true 195 60 255 255
+Rectangle -16777216 false false 195 60 255 255
+Rectangle -7500403 true true 45 60 105 255
+Rectangle -16777216 false false 45 60 105 255
+Line -16777216 false 45 75 255 75
+Line -16777216 false 45 105 255 105
+Line -16777216 false 45 60 255 60
+Line -16777216 false 45 240 255 240
+Line -16777216 false 45 225 255 225
+Line -16777216 false 45 195 255 195
+Line -16777216 false 45 150 255 150
+Polygon -1184463 true true 90 60 75 90 75 240 120 255 180 255 225 240 225 90 210 60
+Polygon -16777216 false false 225 90 210 60 211 246 225 240
+Polygon -16777216 false false 75 90 90 60 89 246 75 240
+Polygon -16777216 false false 89 247 116 254 183 255 211 246 211 211 90 210
+Rectangle -16777216 false false 90 60 210 90
+Rectangle -1184463 true true 180 30 195 90
+Rectangle -16777216 false false 105 30 120 90
+Rectangle -1184463 true true 105 45 120 90
+Rectangle -16777216 false false 180 45 195 90
+Polygon -16777216 true false 195 105 180 120 120 120 105 105
+Polygon -16777216 true false 105 199 120 188 180 188 195 199
+Polygon -16777216 true false 195 120 180 135 180 180 195 195
+Polygon -16777216 true false 105 120 120 135 120 180 105 195
+Line -1184463 true 105 165 195 165
+Circle -16777216 true false 113 226 14
+Polygon -1184463 true true 105 15 60 30 60 45 240 45 240 30 195 15
+Polygon -16777216 false false 105 15 60 30 60 45 240 45 240 30 195 15
 
 butterfly
 true
@@ -627,6 +792,28 @@ Polygon -7500403 true true 105 90 120 195 90 285 105 300 135 300 150 225 165 300
 Rectangle -7500403 true true 127 79 172 94
 Polygon -7500403 true true 195 90 240 150 225 180 165 105
 Polygon -7500403 true true 105 90 60 150 75 180 135 105
+
+person construction
+false
+0
+Rectangle -7500403 true true 123 76 176 95
+Polygon -7500403 true true 105 90 60 195 90 210 115 162 184 163 210 210 240 195 195 90
+Polygon -7500403 true true 180 195 120 195 90 285 105 300 135 300 150 225 165 300 195 300 210 285
+Circle -7500403 true true 110 5 80
+Line -16777216 false 148 143 150 196
+Rectangle -16777216 true false 116 186 182 198
+Circle -1 true false 152 143 9
+Circle -1 true false 152 166 9
+Rectangle -16777216 true false 179 164 183 186
+Polygon -955883 true false 180 90 195 90 195 165 195 195 150 195 150 120 180 90
+Polygon -955883 true false 120 90 105 90 105 165 105 195 150 195 150 120 120 90
+Rectangle -16777216 true false 135 114 150 120
+Rectangle -16777216 true false 135 144 150 150
+Rectangle -16777216 true false 135 174 150 180
+Polygon -955883 true false 105 42 111 16 128 2 149 0 178 6 190 18 192 28 220 29 216 34 201 39 167 35
+Polygon -6459832 true false 54 253 54 238 219 73 227 78
+Polygon -16777216 true false 15 285 15 255 30 225 45 225 75 255 75 270 45 285
+Polygon -7500403 true true 105 90 60 195 90 210 105 195 105 180 105 90
 
 plant
 false
