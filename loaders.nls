@@ -1,0 +1,70 @@
+globals [
+ ;; indicies for loaders.csv
+ I-ID              ;;  0  - ID of the building
+ I-Name            ;;  1
+ I-X               ;;  2
+ I-Y               ;;  3
+]
+
+loaders-own [
+  id
+  material-initial       ;; initial quantity of material this loader needs to move
+  remaining-material     ;;
+  loading?               ;; is it currently loading a truck?
+  scoops                 ;; number of scoops loaded into the current truck
+  trucks-in-queue        ;; number of trucks waiting to be loaded by this loader
+  current-truck          ;; which truck is it loading
+  working                ;; ticks that the scoop needs to do the job.
+]
+
+to init-loaders 
+  init-loader-globals
+  
+  create-loaders number-loaders [
+    set color magenta
+    set shape "bulldozer top"
+    set size 2
+    set material-initial total-volume-excavation / number-loaders
+    set remaining-material material-initial
+    set current-truck -1
+    set working time-scoop
+    move-to one-of patches with [is-excavated? = true]
+  ]
+end
+
+to init-loader-globals 
+  set I-ID     0
+  set I-Name         1
+ set I-X           2
+ set I-Y       3
+end
+
+
+;
+; reads the xlsx file, creates an array of buildings
+;
+to read-loaderlist
+    let temp-loader-list csv:from-file "loaders.csv" 
+    
+    ;; remove headers from the data
+    let firstrow item 0 temp-loader-list
+    if item 0 firstrow = "machine" [ set temp-loader-list remove-item 0 temp-loader-list]
+  
+  set number-loaders length temp-loader-list
+
+    foreach temp-loader-list [
+      row -> 
+         create-loaders 1 [
+             set id item I-ID row
+             set color pink
+             set shape "bulldozer top"
+             set size 2
+             set material-initial total-volume-excavation / number-loaders
+             set remaining-material material-initial
+             set current-truck -1
+             set working time-scoop
+             move-to patch item I-X row item I-Y row
+         ]
+    ]
+    
+end

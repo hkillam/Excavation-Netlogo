@@ -1,8 +1,10 @@
-extensions[ bitmap ]
+extensions [csv  bitmap]
 breed [flagmen flagman]
 breed [trucks truck]
 breed [loaders loader]
 breed [material dirt]
+
+__includes ["loaders.nls"]
 
 globals [
   ramp-up?
@@ -37,16 +39,7 @@ trucks-own [
   loaded            ;; quantity loaded (scoops * scoop-size)
 ]
 
-loaders-own [
-  id
-  material-initial       ;; initial quantity of material this loader needs to move
-  remaining-material     ;;
-  loading?               ;; is it currently loading a truck?
-  scoops                 ;; number of scoops loaded into the current truck
-  trucks-in-queue        ;; number of trucks waiting to be loaded by this loader
-  current-truck          ;; which truck is it loading
-  working                ;; ticks that the scoop needs to do the job.
-]
+
 
 flagmen-own [
   is-out?                ;; true/false - guy on the way out of the site
@@ -65,6 +58,7 @@ to setup
   ask patches [
     set is-ramp? false
     set is-excavated? false
+    set pcolor white
   ]
 
   ask patches with [pxcor >= -1 and pxcor <= 1 and pycor >= -4 and pycor <= 6] [
@@ -85,23 +79,11 @@ to setup
 
   ask patches with [pxcor >= -8 and pxcor <= -2 and pycor >= -12 and pycor <= 3] [
     set is-excavated? true
-  ;;  sprout 1 [
-  ;;    set breed material
-  ;;    set color magenta
-  ;;    set shape "box"
-  ;;  ]
   ]
 
-  create-loaders number-loaders [
-    set color magenta
-    set shape "bulldozer top"
-    set size 2
-    set material-initial total-volume-excavation / number-loaders
-    set remaining-material material-initial
-    set current-truck -1
-    set working time-scoop
-    move-to one-of patches with [is-excavated? = true]
-  ]
+;;  init-loaders
+read-loaderlist
+
 
 
 
@@ -288,6 +270,7 @@ to set-next-section
       set road road-to-entrance  ;;  teleport back to beginning
       setxy -11 -15
       set target dest-entrance
+      set loaded 0
 
     ]]]]]]]]
 
@@ -385,10 +368,10 @@ NIL
 1
 
 BUTTON
-91
-26
-154
-59
+77
+22
+140
+55
 Go
 go
 T
@@ -402,7 +385,7 @@ NIL
 1
 
 INPUTBOX
-16
+7
 87
 207
 147
@@ -446,10 +429,10 @@ time_unload
 Number
 
 INPUTBOX
-17
-151
+7
+147
 109
-211
+207
 volume-truck
 10.0
 1
@@ -458,9 +441,9 @@ Number
 
 INPUTBOX
 110
-151
+147
 206
-211
+207
 volume_truck_deviation
 1.0
 1
