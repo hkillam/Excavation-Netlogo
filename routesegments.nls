@@ -11,6 +11,7 @@ globals [
 
   ;; mark some specific locations in our site
   dest-entrance
+  dest-site-exit
 ]
 
 to set-route-constants
@@ -25,6 +26,7 @@ to set-route-constants
   set road-to-dump      9   ;;  drive away
 
   set dest-entrance patch  -11 5       ;; flagman at the entrance to the site
+  set dest-site-exit patch 12 5
 end
 
 
@@ -50,16 +52,11 @@ to-report ramp-ready?
   if count trucks with [using-ramp? = true] = 0 [
     set using-ramp? true
     
-    show road
     ifelse road = road-to-bottom-ramp  or road = road-up-ramp [
-      show "take the ramp up: " 
-      show road
        set ramp-down? false
        set ramp-up? true
     ][
       if road = road-to-top-ramp [
-        show "take the ramp down: " 
-        show road
          set ramp-up? false
          set ramp-down? true  
       ]     
@@ -69,16 +66,12 @@ to-report ramp-ready?
   
   ;; if the ramp is in use the same direction, jump on
   if  (road = road-to-bottom-ramp or road = road-up-ramp) and ramp-up? = true [
-    show "jump on board ramp up: "
-    show road
     set using-ramp? true
     report true
   ]
   
     ;; if the ramp is in use the same direction, jump on
   if  road = road-to-top-ramp and ramp-down? = true [
-        show "jump on board ramp down: "
-    show road
     set using-ramp? true
     report true
   ]

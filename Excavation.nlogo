@@ -30,6 +30,8 @@ trucks-own [
 
 flagmen-own [
   is-out?                ;; true/false - guy on the way out of the site
+  countdown
+  id
 ]
 
 to setup
@@ -81,12 +83,16 @@ create-flagmen 1 [
       set shape "person construction"
       set color 65
       set size 2
+      set countdown time-wait-exit
+      set id 1
 ]
 create-flagmen 1 [
   setxy 12 7
       set shape "person construction"
       set color red
       set size 2
+      set countdown time-wait-exit
+      set id 2
 ]
 reset-ticks
 end
@@ -105,9 +111,24 @@ to go
   ask loaders [
     scoop
   ]
+
+  ask flagmen [
+    flip-sign
+  ]
   tick
 end
 
+to flip-sign
+   set countdown countdown - 1
+   if countdown < 1 [
+      set countdown random-normal time-wait-exit 1
+      ifelse color = red [
+         set color 65
+     ][
+         set color red
+     ]
+   ]
+end
 
 to get-loader
   let myloader  one-of loaders in-radius 1
@@ -146,6 +167,10 @@ to scoop
 end
 
 to move-truck
+  let exit-light  exit-light-color
+  ifelse patch-here = dest-site-exit and exit-light = red [
+    ;; at the exit, wait for green to go
+  ] [
 
   if  road != road-to-loader-A and road != road-to-loader-B and road != road-to-bottom-ramp [
     ;; not in the pit, follow the route
@@ -185,7 +210,15 @@ to move-truck
            set-next-section
     ]
   ]
+  ]
+end
 
+to-report exit-light-color
+  let exit-color red
+  ask flagmen with [id = 2] [
+    set exit-color color
+  ]
+  report exit-color
 end
 
 ;; get the total remaining material at each loader
@@ -252,7 +285,7 @@ to set-next-section
     ][
     ifelse road = road-up-ramp [
       set road road-to-exit  ;;  from ramp to exit flagman
-      set target patch 12 5
+      set target dest-site-exit
 
     ][
     ifelse road = road-to-exit [
@@ -290,7 +323,6 @@ to arc-forward  ;; turtle procedure
     fd 1
   ]
 end
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
@@ -380,8 +412,8 @@ INPUTBOX
 22
 829
 82
-time_wait_exit
-3.0
+time-wait-exit
+4.0
 1
 0
 Number
