@@ -4,25 +4,12 @@ breed [trucks truck]
 breed [loaders loader]
 breed [material dirt]
 
-__includes ["loaders.nls"]
+__includes ["loaders.nls" "routesegments.nls"]
 
 globals [
   ramp-up?
   ramp-down?
-
-  road-to-entrance
-  road-to-top-ramp
-  road-down-ramp
-  road-to-loader
-  road-to-bottom-ramp
-  road-up-ramp
-  road-to-exit
-  road-to-dump
-
-  ;; mark some specific locations in our site
-  dest-entrance
 ]
-
 
 patches-own [
   is-ramp?          ;; part of the ramp
@@ -46,7 +33,8 @@ flagmen-own [
 ]
 
 to setup
-  set-constants
+  set-route-constants
+
   clear-turtles
   ifelse use_ramp? [
     import-drawing "site_withramp.png"]
@@ -66,7 +54,7 @@ to setup
   ]
 
   create-trucks number-trucks [
-    set color yellow
+    set color 42 + who
     set size 2
     set shape "truck"
     setxy -11 -15
@@ -103,18 +91,7 @@ create-flagmen 1 [
 reset-ticks
 end
 
-to set-constants
-  set road-to-entrance   1
-  set road-to-top-ramp   2   ;; from entrance flagman to top of ramp
-  set road-down-ramp     3   ;; from top of ramp to bottom
-  set road-to-loader     4   ;;  to a piece of material
-  set road-to-bottom-ramp 5  ;;  grab material and go to to bottom of ramp
-  set road-up-ramp       6   ;;  up the ramp
-  set road-to-exit      12   ;;  from ramp to exit flagman
-  set road-to-dump      13   ;;  drive away
 
-  set dest-entrance patch  -11 5       ;; flagman at the entrance to the site
-end
 
 to go
   if  material-remaining <= 0 [stop]
@@ -170,7 +147,8 @@ end
 
 to move-truck
 
-  if  road != road-to-loader and road != road-to-bottom-ramp [
+  if  road != road-to-loader-A and road != road-to-loader-B and road != road-to-bottom-ramp [
+    ;; not in the pit, follow the route
     ifelse count trucks-on patch-ahead 1 = 0 [
       if ramp-ready? = true [
         forward 1
@@ -180,22 +158,28 @@ to move-truck
       ]
     ][
       ;; trucks just stepped into the pit need to step out of the way
-      if road = road-to-loader or road = road-to-bottom-ramp [
+      if road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp [
         right 90
         if count trucks-on patch-ahead 1 = 0 [
           forward 1
         ]
       ]
-      if road = road-to-loader [
+      if road = road-to-loader-A [
         ;;let target-material min-one-of (loader in-radius 25 ) [distance myself]
         ;;ask target-material [ set color pink]
-        set target [ patch-here ] OF one-of loaders
+        set target [ patch-here ] OF one-of loaders with [group = 1]
+        ;;set target [ patch-here ] OF target-material
+      ]
+      if road = road-to-loader-B [
+        ;;let target-material min-one-of (loader in-radius 25 ) [distance myself]
+        ;;ask target-material [ set color pink]
+        set target [ patch-here ] OF one-of loaders with [group = 2]
         ;;set target [ patch-here ] OF target-material
       ]
       face-nowrap target
     ]
   ]
-  if road = road-to-loader or road = road-to-bottom-ramp [
+  if road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp [
     arc-forward
     if patch-here = target [
            set-next-section
@@ -225,11 +209,11 @@ to set-next-section
 
     ][
     ifelse road = road-down-ramp [
-      set road road-to-loader  ;;  to a piece of material
+      set road road-to-loader-A  ;;  to a piece of material
       set using-ramp? false
         rt 90
         fd 1
-        let target-loader one-of loaders
+        let target-loader one-of loaders with [group = 1]
         set target [ patch-here ] OF target-loader
 
       set radius distance target / 2
@@ -241,8 +225,18 @@ to set-next-section
           ]
         ]
     ][
-    ifelse road = road-to-loader [
+    ifelse road = road-to-loader-A [
         set loading? true
+      ;;ask material-on target [die]
+      set road road-to-loader-B  ;;  grab material and go to to bottom of ramp
+      set target [ patch-here ] OF one-of loaders with [group = 2]
+      set radius distance target / 2
+                  if radius > 2 [
+          rt 90
+        ]
+    ][
+    ifelse road = road-to-loader-B [
+       ;; set loading? true
       ;;ask material-on target [die]
       set road road-to-bottom-ramp  ;;  grab material and go to to bottom of ramp
       set target patch 0 -5
@@ -272,10 +266,10 @@ to set-next-section
       set target dest-entrance
       set loaded 0
 
-    ]]]]]]]]
+  ]]]]]]]]]
 
     face-nowrap target
-    if (road = 4 or road = 5) and radius > 2 [
+    if (road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp) and radius > 2 [
           rt 90
     ]
 end
@@ -401,7 +395,7 @@ INPUTBOX
 203
 299
 number-loaders
-3.0
+6.0
 1
 0
 Number

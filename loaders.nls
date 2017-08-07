@@ -4,10 +4,12 @@ globals [
  I-Name            ;;  1
  I-X               ;;  2
  I-Y               ;;  3
+ I-GROUP           ;;  4 
 ]
 
 loaders-own [
   id
+  group                  ;; which group is this machine part of
   material-initial       ;; initial quantity of material this loader needs to move
   remaining-material     ;;
   loading?               ;; is it currently loading a truck?
@@ -33,37 +35,42 @@ to init-loaders
 end
 
 to init-loader-globals 
-  set I-ID     0
+  set I-ID           0
   set I-Name         1
- set I-X           2
- set I-Y       3
+  set I-X            2
+  set I-Y            3
+  set I-GROUP        4
 end
 
 
 ;
-; reads the xlsx file, creates an array of buildings
+; reads the csv file, creates loaders
 ;
 to read-loaderlist
+    init-loader-globals
     let temp-loader-list csv:from-file "loaders.csv" 
     
     ;; remove headers from the data
     let firstrow item 0 temp-loader-list
     if item 0 firstrow = "machine" [ set temp-loader-list remove-item 0 temp-loader-list]
   
-  set number-loaders length temp-loader-list
+    set number-loaders length temp-loader-list
 
     foreach temp-loader-list [
       row -> 
+
          create-loaders 1 [
              set id item I-ID row
-             set color pink
-             set shape "bulldozer top"
+             set group item I-GROUP row
+             ifelse group = 1 [set color pink][set color green]
+             set shape "bulldozer top" 
              set size 2
              set material-initial total-volume-excavation / number-loaders
              set remaining-material material-initial
              set current-truck -1
              set working time-scoop
              move-to patch item I-X row item I-Y row
+      
          ]
     ]
     

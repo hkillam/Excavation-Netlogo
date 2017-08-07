@@ -1,0 +1,28 @@
+globals [
+  road-to-entrance
+  road-to-top-ramp
+  road-down-ramp
+  road-to-loader-A
+  road-to-loader-B
+  road-to-bottom-ramp
+  road-up-ramp
+  road-to-exit
+  road-to-dump
+
+  ;; mark some specific locations in our site
+  dest-entrance
+]
+
+to set-route-constants
+  set road-to-entrance   1
+  set road-to-top-ramp   2   ;; from entrance flagman to top of ramp
+  set road-down-ramp     3   ;; from top of ramp to bottom
+  set road-to-loader-A   4   ;;  to a piece of material
+  set road-to-loader-B   5   ;;  to a piece of material
+  set road-to-bottom-ramp 6  ;;  grab material and go to to bottom of ramp
+  set road-up-ramp       7   ;;  up the ramp
+  set road-to-exit      8   ;;  from ramp to exit flagman
+  set road-to-dump      9   ;;  drive away
+
+  set dest-entrance patch  -11 5       ;; flagman at the entrance to the site
+end
