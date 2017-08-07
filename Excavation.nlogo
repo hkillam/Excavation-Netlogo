@@ -291,31 +291,6 @@ to arc-forward  ;; turtle procedure
   ]
 end
 
-to-report ramp-ready?
-  let ramp-ahead? true
-
-  ;; if this isn't a ramp, just return true
-  ask patch-ahead 1 [
-    if is-ramp? = false [
-      set ramp-ahead? false
-    ]
-  ]
-  if ramp-ahead? = false [
-    set using-ramp? false
-    report true
-  ]
-
-  if using-ramp? = true [
-    report true  ;; I'm walking here
-  ]
-
-  if count trucks with [using-ramp? = true] = 0 [
-    set using-ramp? true
-    report true
-  ]
-
-  report false
-end
 @#$#@#$#@
 GRAPHICS-WINDOW
 210

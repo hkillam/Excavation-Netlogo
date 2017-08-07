@@ -26,3 +26,63 @@ to set-route-constants
 
   set dest-entrance patch  -11 5       ;; flagman at the entrance to the site
 end
+
+
+to-report ramp-ready?
+  let ramp-ahead? true
+
+  ;; if this isn't a ramp, just return true
+  ask patch-ahead 1 [
+    if is-ramp? = false [
+      set ramp-ahead? false
+    ]
+  ]
+  if ramp-ahead? = false [
+    set using-ramp? false
+    report true
+  ]
+
+  if using-ramp? = true [
+    report true  ;; I'm walking here
+  ]
+
+  ;; if the ramp is free, take it, and mark the direction it is being used.
+  if count trucks with [using-ramp? = true] = 0 [
+    set using-ramp? true
+    
+    show road
+    ifelse road = road-to-bottom-ramp  or road = road-up-ramp [
+      show "take the ramp up: " 
+      show road
+       set ramp-down? false
+       set ramp-up? true
+    ][
+      if road = road-to-top-ramp [
+        show "take the ramp down: " 
+        show road
+         set ramp-up? false
+         set ramp-down? true  
+      ]     
+    ]
+    report true
+  ]
+  
+  ;; if the ramp is in use the same direction, jump on
+  if  (road = road-to-bottom-ramp or road = road-up-ramp) and ramp-up? = true [
+    show "jump on board ramp up: "
+    show road
+    set using-ramp? true
+    report true
+  ]
+  
+    ;; if the ramp is in use the same direction, jump on
+  if  road = road-to-top-ramp and ramp-down? = true [
+        show "jump on board ramp down: "
+    show road
+    set using-ramp? true
+    report true
+  ]
+
+  report false
+end
+
