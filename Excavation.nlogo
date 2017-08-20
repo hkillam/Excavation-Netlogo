@@ -38,7 +38,7 @@ to setup
   set-route-constants
 
   clear-turtles
-  ifelse use_ramp? [
+  ifelse use-ramp? [
     import-drawing "site_withramp.png"]
   [ import-drawing "site_noramp.png"]
 
@@ -230,82 +230,6 @@ to-report material-remaining
   report remaining
 end
 
-to set-next-section
-    ifelse road = road-to-entrance [
-      set road road-to-top-ramp   ;; from entrance flagman to top of ramp
-      set target patch 0 5
-
-    ][
-    ifelse road = road-to-top-ramp [
-      set road road-down-ramp   ;; from top of ramp to bottom
-      set target patch 0 -4
-
-    ][
-    ifelse road = road-down-ramp [
-      set road road-to-loader-A  ;;  to a piece of material
-      set using-ramp? false
-        rt 90
-        fd 1
-        let target-loader one-of loaders with [group = 1]
-        set target [ patch-here ] OF target-loader
-
-      set radius distance target / 2
-        if radius > 2 [
-          rt 90
-          if ([is-ramp?] of patch-ahead 1) = true [
-            set radius 0
-            lt 90
-          ]
-        ]
-    ][
-    ifelse road = road-to-loader-A [
-        set loading? true
-      ;;ask material-on target [die]
-      set road road-to-loader-B  ;;  grab material and go to to bottom of ramp
-      set target [ patch-here ] OF one-of loaders with [group = 2]
-      set radius distance target / 2
-                  if radius > 2 [
-          rt 90
-        ]
-    ][
-    ifelse road = road-to-loader-B [
-       ;; set loading? true
-      ;;ask material-on target [die]
-      set road road-to-bottom-ramp  ;;  grab material and go to to bottom of ramp
-      set target patch 0 -5
-      set radius distance target / 2
-                  if radius > 2 [
-          rt 90
-        ]
-    ][
-    ifelse road = road-to-bottom-ramp [
-
-      set road road-up-ramp  ;;  up the ramp
-      set target patch 0 5
-    ][
-    ifelse road = road-up-ramp [
-      set road road-to-exit  ;;  from ramp to exit flagman
-      set target dest-site-exit
-
-    ][
-    ifelse road = road-to-exit [
-      set road road-to-dump  ;;  drive away
-      set target patch 12 -13
-
-    ][
-    if road = road-to-dump [
-      set road road-to-entrance  ;;  teleport back to beginning
-      setxy -11 -15
-      set target dest-entrance
-      set loaded 0
-
-  ]]]]]]]]]
-
-    face-nowrap target
-    if (road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp) and radius > 2 [
-          rt 90
-    ]
-end
 
 to arc-forward  ;; turtle procedure
   ifelse radius > 2 [
@@ -511,8 +435,8 @@ SWITCH
 148
 791
 181
-use_ramp?
-use_ramp?
+use-ramp?
+use-ramp?
 0
 1
 -1000
