@@ -17,22 +17,9 @@ loaders-own [
   trucks-in-queue        ;; number of trucks waiting to be loaded by this loader
   current-truck          ;; which truck is it loading
   working                ;; ticks that the scoop needs to do the job.
+  contaminated?
 ]
 
-to init-loaders 
-  init-loader-globals
-  
-  create-loaders number-loaders [
-    set color magenta
-    set shape "bulldozer top"
-    set size 2
-    set material-initial total-volume-excavation / number-loaders
-    set remaining-material material-initial
-    set current-truck -1
-    set working time-scoop
-    move-to one-of patches with [is-excavated? = true]
-  ]
-end
 
 to init-loader-globals 
   set I-ID           0
@@ -54,7 +41,8 @@ to read-loaderlist
     let firstrow item 0 temp-loader-list
     if item 0 firstrow = "machine" [ set temp-loader-list remove-item 0 temp-loader-list]
   
-    set number-loaders length temp-loader-list
+    let number-loaders 0
+    let cont-number-loaders 0
 
     foreach temp-loader-list [
       row -> 
@@ -62,16 +50,57 @@ to read-loaderlist
          create-loaders 1 [
              set id item I-ID row
              set group item I-GROUP row
-             ifelse group = 1 [set color pink][set color green]
+
              set shape "bulldozer top" 
              set size 2
-             set material-initial total-volume-excavation / number-loaders
-             set remaining-material material-initial
+             ifelse group = 1 [
+                 set number-loaders number-loaders + 1
+                 set contaminated? false
+             ][
+                 set cont-number-loaders cont-number-loaders + 1
+                 set contaminated? true
+             ]
+             
              set current-truck -1
              set working time-scoop
              move-to patch item I-X row item I-Y row
       
          ]
     ]
-    
+  
+    ask loaders [
+      ifelse group = 1 [
+         set color pink
+         set material-initial total-volume-excavation / number-loaders
+      ][set color green
+         set material-initial cont-total-volume-excavation / cont-number-loaders
+      ]
+      set remaining-material material-initial
+  ]
+end
+
+
+to scoop
+  ifelse  working <= 0 [
+    if current-truck != -1 [
+      let scoop-size 0
+       ask truck current-truck [
+        ifelse contaminated? = false [
+          set scoop-size random-normal volume-scoop volume-scoop-deviation
+         set loaded  loaded + scoop-size
+        ][
+          set scoop-size random-normal cont-volume-scoop cont-volume-scoop-deviation
+         set loaded  loaded + scoop-size
+        ]
+       ]
+       set remaining-material remaining-material - scoop-size
+       ifelse contaminated? = false [
+          set working random-normal time-scoop time-scoop-deviation
+       ][
+          set working random-normal cont-time-scoop cont-time-scoop-deviation
+       ]
+    ]
+  ][
+    set working  working - 1
+  ]
 end

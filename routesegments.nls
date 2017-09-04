@@ -13,8 +13,13 @@ globals [
 
   ;; mark some specific locations in our site
   dest-entrance
-  dest-site-exit
+  dest-site-exit-A
+  dest-site-exit-B
+  dest-top-ramp
   dest-top-nonramp
+  dest-pit-exit-A
+  dest-pit-exit-B
+  
 ]
 
 to set-route-constants
@@ -31,14 +36,21 @@ to set-route-constants
   set road-to-exit-non-ramp 11;
 
   set dest-entrance patch  -11 5       ;; flagman at the entrance to the site
-  set dest-site-exit patch 12 5
-  set dest-top-nonramp patch -5 5
+  set dest-site-exit-A patch 12 5
+  set dest-site-exit-B patch 12 -7
+  set dest-top-ramp patch 0 5
+  set dest-top-nonramp patch -5 5          ;; go in a little before the old ramp location
+  set dest-pit-exit-A patch 5 5            ;; at top of pit
+  set dest-pit-exit-B patch 11 -7          ;; down side of pit
 end
 
 
 to-report ramp-ready?
   let ramp-ahead? true
 
+  ;; not using the ramp, report that it is ready
+  if use-ramp? = false [report true]
+  
   ;; if this isn't a ramp, just return true
   ask patch-ahead 1 [
     if is-ramp? = false [
@@ -89,10 +101,11 @@ to set-next-section
     ifelse road = road-to-entrance [
       ifelse use-ramp? = true [
          set road road-to-top-ramp   ;; from entrance flagman to top of ramp
-         set target patch 0 5
+         set target dest-top-ramp
       ][
          set road road-to-top-nonramp
          set target dest-top-nonramp
+
       ]
     ][
     ifelse road = road-to-top-ramp [
@@ -102,71 +115,69 @@ to set-next-section
     ][
     ifelse road = road-down-ramp or road = road-to-top-nonramp [
       set road road-to-loader-A  ;;  to a piece of material
+      let target-loader one-of loaders with [group = 1  and material-remaining > 0]
+      if contaminated? = true [
+          set road road-to-loader-B
+          set target-loader one-of loaders with [group = 2 and material-remaining > 0]
+        ]
       set using-ramp? false
-        rt 90
-        fd 1
-        let target-loader one-of loaders with [group = 1]
-        set target [ patch-here ] OF target-loader
+      rt 90
+      fd 1
+      set target [ patch-here ] OF target-loader
+    ][
+    ifelse road = road-to-loader-A or road = road-to-loader-B [
+      set loading? true
+      ifelse use-ramp? = true [
+          set road road-to-bottom-ramp  ;;  grab material and go to to bottom of ramp
+          set target patch 0 -5
+      ][
+          ;; else no ramp
+          set road road-to-exit-non-ramp
+          ifelse non-ramp-exit = "A"
+          [
+            set target dest-pit-exit-A
+            ask flagmen with [id = 2] [  setxy 12 7 ]
+         ]
+         [  set target dest-pit-exit-B
+            ask flagmen with [id = 2] [  setxy 12 6 ]
+         ]
+      ]
 
-      set radius distance target / 2
-        if radius > 2 [
-          rt 90
-          if ([is-ramp?] of patch-ahead 1) = true [
-            set radius 0
-            lt 90
-          ]
-        ]
-    ][
-    ifelse road = road-to-loader-A [
-        set loading? true
-      ;;ask material-on target [die]
-      set road road-to-loader-B  ;;  grab material and go to to bottom of ramp
-      set target [ patch-here ] OF one-of loaders with [group = 2]
-      set radius distance target / 2
-                  if radius > 2 [
-          rt 90
-        ]
-    ][
-    ifelse road = road-to-loader-B [
-       ;; set loading? true
-      ;;ask material-on target [die]
-            ifelse use-ramp? = true [
-      set road road-to-bottom-ramp  ;;  grab material and go to to bottom of ramp
-      set target patch 0 -5
-            ][
-              set road road-to-exit-non-ramp
-              set target patch 6 5
-            ]
-      set radius distance target / 2
-                  if radius > 2 [
-          rt 90
-        ]
     ][
     ifelse road = road-to-bottom-ramp [
 
       set road road-up-ramp  ;;  up the ramp
-      set target patch 0 5
+      set target dest-top-ramp
     ][
-    ifelse road = road-up-ramp or road = road-to-exit-non-ramp [
+    ifelse road = road-up-ramp [
       set road road-to-exit  ;;  from ramp to exit flagman
-      set target dest-site-exit
+      set target dest-site-exit-A
+    ][
+    ifelse road = road-to-exit-non-ramp [
+      set road road-to-exit  ;;  from ramp to exit flagman
+      ifelse non-ramp-exit = "A" [  
+         set target dest-site-exit-A
+      ][  set target dest-site-exit-B ]          
 
     ][
     ifelse road = road-to-exit [
       set road road-to-dump  ;;  drive away
       set target patch 12 -13
-
+      
     ][
     if road = road-to-dump [
       set road road-to-entrance  ;;  teleport back to beginning
       setxy -11 -15
       set target dest-entrance
       set loaded 0
-
+      ifelse contaminated? = true [
+         set take-a-dump random-normal cont-time-unload cont-time-unload-deviation     
+         if cont-material-remaining <= 0 [die]
+      ][
+         set take-a-dump random-normal time-unload time-unload-deviation
+         if material-remaining <= 0 [die]
+      ]
   ]]]]]]]]]
 
     face-nowrap target
-    if (road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp) and radius > 2 [
-          rt 90
-    ]
 end

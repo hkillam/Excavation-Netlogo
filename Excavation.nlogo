@@ -20,10 +20,11 @@ trucks-own [
   road              ;; section of road the truck is currently on
   target            ;;
   using-ramp?       ;; is this truck on the ramp?
-  radius            ;; for moving around the badlands
   loaderid          ;; which loader is this truck going to?
   loading?
   loaded            ;; quantity loaded (scoops * scoop-size)
+  take-a-dump
+  contaminated?
 ]
 
 
@@ -38,12 +39,7 @@ to setup
   set-route-constants
 
   clear-turtles
-  ifelse use-ramp? [
-    import-drawing "site_withramp.png"]
-  [ import-drawing "site_noramp.png"]
 
-  set ramp-up? false
-  set ramp-down? true
 
   ask patches [
     set is-ramp? false
@@ -51,21 +47,27 @@ to setup
     set pcolor white
   ]
 
+  import-drawing "site_noramp.png"
+
+  set ramp-up? false
+  set ramp-down? true
+
+
+if use-ramp? [
   ask patches with [pxcor >= -1 and pxcor <= 1 and pycor >= -4 and pycor <= 6] [
     set is-ramp? true
+    set pcolor 57
   ]
+    ask patches with [(pxcor = -5 and pycor = 3) or (pxcor = -4 and pycor = 1) or (pxcor = -3 and pycor = -1) or (pxcor = -2 and pycor = -3)
+                                                 or (pxcor = -3 and pycor = 2)   or (pxcor = -2 and pycor = 3)  or (pxcor = -2 and pycor = 0)
+      or (pxcor = 2 and pycor = 3) or (pxcor = 2 and pycor = 0) or (pxcor = 2 and pycor = -3)
+      or (pxcor = 3 and pycor = 2) or (pxcor = 3 and pycor = -1) or (pxcor = 4 and pycor = 1) or (pxcor = 5 and pycor = 3)
+    ]
+    [ set pcolor 7]
+]
 
-  create-trucks number-trucks [
-    set color 42 + who
-    set size 2
-    set shape "truck"
-    setxy -11 -15
-    set using-ramp? false
-    set loading? false
-    set road road-to-entrance
-    set target dest-entrance
-    face-nowrap target
-  ]
+  setup-trucks number-trucks false  42
+  setup-trucks cont-number-trucks true  72
 
   ask patches with [pxcor >= -8 and pxcor <= -2 and pycor >= -12 and pycor <= 3] [
     set is-excavated? true
@@ -73,9 +75,6 @@ to setup
 
 ;;  init-loaders
 read-loaderlist
-
-
-
 
 
 create-flagmen 1 [
@@ -97,10 +96,24 @@ create-flagmen 1 [
 reset-ticks
 end
 
-
+to setup-trucks [num-trucks is-contaminated?  colour]
+  create-trucks num-trucks [
+    set color colour + who
+    set size 2
+    set shape "truck"
+    setxy -11 -15
+    set using-ramp? false
+    set loading? false
+    set road road-to-entrance
+    set target dest-entrance
+    face-nowrap target
+    set take-a-dump 0
+    set contaminated? is-contaminated?
+]
+end
 
 to go
-  if  material-remaining <= 0 [stop]
+  if  material-remaining <= 0 and cont-material-remaining <= 0 [stop]
 
   ask trucks with [loading? = true] [
     get-loader
@@ -137,10 +150,18 @@ to get-loader
   ;; if i am being loaded
   ifelse  [current-truck] of myloader = myid [
 
-    ;; if I am full, release the loader
-    if loaded >= volume-truck [
-      ask myloader [set current-truck -1]
-      set loading? false
+    ifelse contaminated? = false [
+      ;; if I am full, release the loader
+      if loaded >= volume-truck [
+        ask myloader [set current-truck -1]
+        set loading? false
+      ]
+    ][
+      ;; if I am full, release the loader
+      if loaded >= cont-volume-truck [
+        ask myloader [set current-truck -1]
+        set loading? false
+      ]
     ]
   ][
 
@@ -152,31 +173,31 @@ to get-loader
   ]
 end
 
-to scoop
-  ifelse  working <= 0 [
-    if current-truck != -1 [
-       ask truck current-truck [
-         set loaded  loaded + volume-scoop
-       ]
-       set remaining-material remaining-material - volume-scoop
-       set working time-scoop
-    ]
-  ][
-    set working  working - 1
-  ]
-end
 
 to move-truck
   let exit-light  exit-light-color
-  ifelse patch-here = dest-site-exit and exit-light = red [
+  let step-size 1
+
+  ifelse take-a-dump > 0 [
+    set take-a-dump take-a-dump - 1
+  ][
+  if (road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp or road = road-to-exit-non-ramp) [
+    set step-size pit-pace
+  ]
+  ifelse (patch-here = dest-site-exit-A  or patch-here = dest-site-exit-B) and exit-light = red [
     ;; at the exit, wait for green to go
   ] [
 
-  if  road != road-to-loader-A and road != road-to-loader-B and road != road-to-bottom-ramp [
     ;; not in the pit, follow the route
-    ifelse count trucks-on patch-ahead 1 = 0 [
+    let trucks-ahead trucks-on patch-ahead 1
+    let all-cool false
+    if (count trucks-ahead = 0 or (count trucks-ahead = 1 and member? self trucks-ahead)) [
+      set all-cool true
+    ]
+
+    ifelse all-cool = true [
       if ramp-ready? = true [
-        forward 1
+        forward step-size
         if patch-here = target [
            set-next-section
         ]
@@ -185,31 +206,16 @@ to move-truck
       ;; trucks just stepped into the pit need to step out of the way
       if road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp [
         right 90
-        if count trucks-on patch-ahead 1 = 0 [
-          forward 1
+        set trucks-ahead trucks-on patch-ahead 1
+        if count trucks-ahead = 0 [
+          forward step-size
         ]
+        face-nowrap target
       ]
-      if road = road-to-loader-A [
-        ;;let target-material min-one-of (loader in-radius 25 ) [distance myself]
-        ;;ask target-material [ set color pink]
-        set target [ patch-here ] OF one-of loaders with [group = 1]
-        ;;set target [ patch-here ] OF target-material
-      ]
-      if road = road-to-loader-B [
-        ;;let target-material min-one-of (loader in-radius 25 ) [distance myself]
-        ;;ask target-material [ set color pink]
-        set target [ patch-here ] OF one-of loaders with [group = 2]
-        ;;set target [ patch-here ] OF target-material
-      ]
-      face-nowrap target
+
     ]
-  ]
-  if road = road-to-loader-A or road = road-to-loader-B or road = road-to-bottom-ramp [
-    arc-forward
-    if patch-here = target [
-           set-next-section
+
     ]
-  ]
   ]
 end
 
@@ -224,34 +230,24 @@ end
 ;; get the total remaining material at each loader
 to-report material-remaining
   let remaining  0
-  ask loaders [
+  ask loaders with [contaminated? = false] [
     set remaining remaining + remaining-material
   ]
   report remaining
 end
 
-
-to arc-forward  ;; turtle procedure
-  ifelse radius > 2 [
-  ;; calculate how much of an angle we'll be turning through
-  ;; (essentially converting radians to degrees)
-  let theta 1 * 180 / (pi * radius)
-  ;; turn to face the next point we're going to
-  lt theta / 2
-  ;; go there
-  fd 1
-  ;; turn to face tangent to the circle
-  lt theta / 2
-
-  ][
-    fd 1
+to-report cont-material-remaining
+  let remaining  0
+  ask loaders with [contaminated? = true] [
+    set remaining remaining + remaining-material
   ]
+  report remaining
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-210
+154
 10
-647
+591
 448
 -1
 -1
@@ -310,32 +306,32 @@ NIL
 1
 
 INPUTBOX
-7
-87
-207
-147
+620
+31
+762
+91
 number-trucks
-7.0
+5.0
+1
+0
+Number
+
+INPUTBOX
+791
+31
+951
+91
+cont-number-trucks
+2.0
 1
 0
 Number
 
 INPUTBOX
 7
-239
-203
-299
-number-loaders
-6.0
-1
-0
-Number
-
-INPUTBOX
-674
-22
-829
-82
+79
+122
+139
 time-wait-exit
 4.0
 1
@@ -343,21 +339,32 @@ time-wait-exit
 Number
 
 INPUTBOX
-674
-86
-829
-146
-time_unload
-5.0
+618
+357
+700
+417
+time-unload
+30.0
 1
 0
 Number
 
 INPUTBOX
-7
-147
-109
-207
+791
+357
+875
+417
+cont-time-unload
+50.0
+1
+0
+Number
+
+INPUTBOX
+620
+91
+693
+151
 volume-truck
 10.0
 1
@@ -365,10 +372,21 @@ volume-truck
 Number
 
 INPUTBOX
-110
-147
-206
-207
+791
+91
+871
+151
+cont-volume-truck
+10.0
+1
+0
+Number
+
+INPUTBOX
+693
+91
+763
+151
 volume_truck_deviation
 1.0
 1
@@ -376,10 +394,21 @@ volume_truck_deviation
 Number
 
 INPUTBOX
-6
-299
-98
-359
+871
+91
+951
+151
+cont-volume_truck_deviation
+1.0
+1
+0
+Number
+
+INPUTBOX
+619
+176
+695
+236
 volume-scoop
 1.0
 1
@@ -387,21 +416,43 @@ volume-scoop
 Number
 
 INPUTBOX
-98
-299
-204
-359
-volume_scoop_deviation
+791
+176
+871
+236
+cont-volume-scoop
+1.0
+1
+0
+Number
+
+INPUTBOX
+695
+176
+764
+236
+volume-scoop-deviation
 0.2
 1
 0
 Number
 
 INPUTBOX
-679
-201
-834
-261
+871
+176
+951
+236
+cont-volume-scoop-deviation
+0.2
+1
+0
+Number
+
+INPUTBOX
+618
+297
+765
+357
 total-volume-excavation
 1000.0
 1
@@ -409,10 +460,21 @@ total-volume-excavation
 Number
 
 INPUTBOX
-6
-360
-161
-420
+791
+297
+951
+357
+cont-total-volume-excavation
+300.0
+1
+0
+Number
+
+INPUTBOX
+619
+237
+697
+297
 time-scoop
 3.0
 1
@@ -420,37 +482,133 @@ time-scoop
 Number
 
 INPUTBOX
-96
-360
-206
-420
-time_scoop_deviation
-.2
+791
+237
+871
+297
+cont-time-scoop
+3.0
 1
 0
-String
+Number
+
+INPUTBOX
+697
+236
+765
+296
+time-scoop-deviation
+0.2
+1
+0
+Number
+
+INPUTBOX
+871
+236
+951
+296
+cont-time-scoop-deviation
+0.2
+1
+0
+Number
 
 SWITCH
-675
-148
-791
-181
+6
+149
+120
+182
 use-ramp?
 use-ramp?
-0
+1
 1
 -1000
 
 MONITOR
-681
-294
-795
-339
+6
+317
+120
+362
 material-remaining
 material-remaining
-17
+2
 1
 11
+
+CHOOSER
+6
+182
+120
+227
+non-ramp-exit
+non-ramp-exit
+"A" "B"
+0
+
+INPUTBOX
+6
+240
+121
+300
+pit-pace
+0.5
+1
+0
+Number
+
+TEXTBOX
+623
+11
+773
+29
+Clean soil
+11
+0.0
+1
+
+TEXTBOX
+792
+11
+942
+29
+Contaiminated\n
+11
+0.0
+1
+
+MONITOR
+6
+362
+120
+407
+NIL
+cont-material-remaining
+2
+1
+11
+
+INPUTBOX
+699
+357
+766
+417
+time-unload-deviation
+7.0
+1
+0
+Number
+
+INPUTBOX
+874
+357
+950
+417
+cont-time-unload-deviation
+10.0
+1
+0
+Number
 
 @#$#@#$#@
 ## WHAT IS IT?
